@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 
 const EARTH_RADIUS = 2.6;
 const EARTH_MAP_URL = "/earth-map.jpg";
@@ -53,7 +56,7 @@ export default function App() {
     camera.position.set(0, 4.8, 8.4);
 
     const renderer = new THREE.WebGLRenderer({
-      antialias: true,
+      antialias: false, // EffectComposer usually handles AA or it's disabled for performance
       alpha: true,
       preserveDrawingBuffer: true,
     });
@@ -72,10 +75,29 @@ export default function App() {
     controls.maxDistance = VIEW.maxDistance;
     controls.maxPolarAngle = Math.PI * 0.7;
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.45));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.25);
-    sun.position.set(6, 4, 8);
+    // --- LIGHTING ---
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // Increased ambient
+    scene.add(ambientLight);
+
+    const sun = new THREE.DirectionalLight(0xffffff, 2.5); // White sun
+    sun.position.set(10, 6, 10);
     scene.add(sun);
+
+    const rimLight = new THREE.PointLight(0x88ccff, 4.0, 20); // Cool rim light
+    rimLight.position.set(-5, 2, -10);
+    scene.add(rimLight);
+
+    // --- POST PROCESSING ---
+    const renderScene = new RenderPass(scene, camera);
+    const bloomPass = new UnrealBloomPass(
+        new THREE.Vector2(window.innerWidth, window.innerHeight),
+        0.8,  // Strength (intensity)
+        0.4,  // Radius
+        0.85  // Threshold
+    );
+    const composer = new EffectComposer(renderer);
+    composer.addPass(renderScene);
+    composer.addPass(bloomPass);
 
     const texLoader = new THREE.TextureLoader();
     const mapTex = texLoader.load(EARTH_MAP_URL, () => {
@@ -99,6 +121,9 @@ export default function App() {
     const earth = new THREE.Mesh(earthGeo, earthMat);
     world.add(earth);
 
+    // --- CLOUD LAYER REMOVED ---
+
+
     const atmosphereGeo = new THREE.SphereGeometry(EARTH_RADIUS * 1.04, 64, 64);
     const atmosphereMat = new THREE.ShaderMaterial({
       vertexShader: `
@@ -116,7 +141,9 @@ export default function App() {
         varying vec3 vViewDir;
         void main() {
           float intensity = pow(0.55 - dot(vNormal, vViewDir), 2.0);
-          vec3 glow = vec3(0.25, 0.55, 1.0) * intensity;
+          float intensity = pow(0.55 - dot(vNormal, vViewDir), 2.0);
+          // Whiten Blue atmosphere (Light Blue/White)
+          vec3 glow = vec3(0.4, 0.7, 1.0) * intensity;
           gl_FragColor = vec4(glow, intensity);
         }
       `,
@@ -298,7 +325,7 @@ export default function App() {
       new THREE.MeshStandardMaterial({
         color: 0xffd24a,
         emissive: 0xffb300,
-        emissiveIntensity: 0.8,
+        emissiveIntensity: 2.5, // Make the RAK dot glow beautifully
       }),
     );
     dot.position.copy(rakVector);
@@ -328,10 +355,10 @@ export default function App() {
       new THREE.SphereGeometry(0.16, 24, 24),
       new THREE.MeshStandardMaterial({
         color: 0x2c3e50,
-        metalness: 0.55,
-        roughness: 0.28,
+        metalness: 0.8, // Increased for reflections
+        roughness: 0.2, // Smoother for highlights
         emissive: 0x0a2342,
-        emissiveIntensity: 0.25,
+        emissiveIntensity: 0.5, // Subtle glow base
       }),
     );
     satGroup.add(satBody);
@@ -340,9 +367,9 @@ export default function App() {
     const panelMat = new THREE.MeshStandardMaterial({
       color: 0x0f9fd1,
       emissive: 0x003b6f,
-      emissiveIntensity: 0.35,
-      roughness: 0.3,
-      metalness: 0.15,
+      emissiveIntensity: 0.8, // Make panels glow slightly
+      roughness: 0.2,
+      metalness: 0.9, // Very metallic solar panels
     });
     const leftPanel = new THREE.Mesh(panelGeo, panelMat);
     leftPanel.position.x = -0.78;
@@ -388,7 +415,7 @@ export default function App() {
       new THREE.MeshStandardMaterial({
         color: 0xffc857,
         emissive: 0xffa24b,
-        emissiveIntensity: 0.6,
+        emissiveIntensity: 2.0, // High intensity for bloom
       }),
     );
     antennaTip.position.set(0, 0.58, -0.05);
@@ -423,7 +450,7 @@ export default function App() {
     const beaconMat = new THREE.MeshStandardMaterial({
       color: 0x39d1c7,
       emissive: 0x39d1c7,
-      emissiveIntensity: 1.0,
+      emissiveIntensity: 3.0, // Beacons should really glow
     });
     const beacon = new THREE.Mesh(beaconGeo, beaconMat);
     beacon.position.set(0, 0.08, -0.22);
@@ -551,6 +578,8 @@ export default function App() {
       stars.rotation.y -= 0.00008;
       stars.material.opacity = 0.8 + (Math.sin(t * 0.6) + 1) * 0.08;
       planetGroup.rotation.y -= 0.00005;
+      
+      // Cloud rotation removed
 
       const speed = 0.7;
       if (!pinnedRef.current) orbitAngle += speed * delta;
@@ -649,7 +678,8 @@ export default function App() {
       }
 
       controls.update();
-      renderer.render(scene, camera);
+      // renderer.render(scene, camera);
+      composer.render();
     };
 
     animate();
@@ -663,6 +693,7 @@ export default function App() {
       if (stageRef.current) {
         const { clientWidth, clientHeight } = stageRef.current;
         renderer.setSize(clientWidth, clientHeight);
+        composer.setSize(clientWidth, clientHeight); // Update composer size
       }
 
       // Responsive adjustments
