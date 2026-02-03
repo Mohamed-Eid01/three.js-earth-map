@@ -4,6 +4,13 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 const EARTH_RADIUS = 2.6;
 const EARTH_MAP_URL = "/earth-map.jpg";
+const VIEW = {
+  cameraDistance: 10.4,
+  modelScale: 1,
+  minDistance: 2.4,
+  maxDistance: 12.5,
+  orbitRadiusOffset: 1.9,
+};
 
 function latLonToVector3(lat, lon, radius) {
   const phi = THREE.MathUtils.degToRad(90 - lat);
@@ -61,8 +68,8 @@ export default function App() {
     controls.enableDamping = true;
     controls.enablePan = false;
     controls.autoRotate = false;
-    controls.minDistance = 2.4;
-    controls.maxDistance = 8.5;
+    controls.minDistance = VIEW.minDistance;
+    controls.maxDistance = VIEW.maxDistance;
     controls.maxPolarAngle = Math.PI * 0.7;
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.45));
@@ -85,8 +92,12 @@ export default function App() {
       bumpMap: mapTex,
       bumpScale: 0.08,
     });
+    const world = new THREE.Group();
+    world.scale.setScalar(VIEW.modelScale);
+    scene.add(world);
+
     const earth = new THREE.Mesh(earthGeo, earthMat);
-    scene.add(earth);
+    world.add(earth);
 
     const atmosphereGeo = new THREE.SphereGeometry(EARTH_RADIUS * 1.04, 64, 64);
     const atmosphereMat = new THREE.ShaderMaterial({
@@ -115,7 +126,7 @@ export default function App() {
       depthWrite: false,
     });
     const atmosphere = new THREE.Mesh(atmosphereGeo, atmosphereMat);
-    scene.add(atmosphere);
+    world.add(atmosphere);
 
     const starsGeo = new THREE.BufferGeometry();
     const starCount = 5200;
@@ -144,12 +155,12 @@ export default function App() {
       depthWrite: false,
     });
     const stars = new THREE.Points(starsGeo, starsMat);
-    scene.add(stars);
+    world.add(stars);
 
     // sparkle lights removed
 
     const planetGroup = new THREE.Group();
-    scene.add(planetGroup);
+    world.add(planetGroup);
 
     const planets = [
       {
@@ -275,7 +286,7 @@ export default function App() {
     const rakVector = latLonToVector3(25.79, 55.94, EARTH_RADIUS + 0.02);
     const uaeCenter = latLonToVector3(24.7, 54.6, EARTH_RADIUS);
     const uaeNormal = uaeCenter.clone().normalize();
-    const cameraDistance = 4.4;
+    const cameraDistance = VIEW.cameraDistance;
     camera.position.copy(
       uaeCenter.clone().addScaledVector(uaeNormal, cameraDistance),
     );
@@ -310,7 +321,7 @@ export default function App() {
     earth.add(ring);
 
     const orbitGroup = new THREE.Group();
-    scene.add(orbitGroup);
+    world.add(orbitGroup);
 
     const satGroup = new THREE.Group();
     const satBody = new THREE.Mesh(
@@ -439,7 +450,7 @@ export default function App() {
       orbitGroup.quaternion.copy(q2.multiply(q1));
     }
 
-    const orbitRadius = EARTH_RADIUS + 1.9;
+    const orbitRadius = EARTH_RADIUS + VIEW.orbitRadiusOffset;
     const orbitPts = [];
     for (let i = 0; i <= 360; i += 1) {
       const t = (i / 360) * Math.PI * 2;
@@ -473,7 +484,7 @@ export default function App() {
       opacity: 0.35,
     });
     const trailLine = new THREE.Line(trailGeom, trailMat);
-    scene.add(trailLine);
+    world.add(trailLine);
 
     const beamGeom = new THREE.CylinderGeometry(0.03, 0.18, 1, 18, 1, true);
     const beamMat = new THREE.MeshBasicMaterial({
@@ -486,7 +497,7 @@ export default function App() {
     });
     const beam = new THREE.Mesh(beamGeom, beamMat);
     beam.visible = false;
-    scene.add(beam);
+    world.add(beam);
 
     function worldToScreen(pos) {
       const rect = renderer.domElement.getBoundingClientRect();
@@ -644,10 +655,21 @@ export default function App() {
     animate();
 
     const handleResize = () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      camera.aspect = width / height;
       camera.updateProjectionMatrix();
-      const { clientWidth, clientHeight } = stageRef.current;
-      renderer.setSize(clientWidth, clientHeight);
+      
+      if (stageRef.current) {
+        const { clientWidth, clientHeight } = stageRef.current;
+        renderer.setSize(clientWidth, clientHeight);
+      }
+
+      // Responsive adjustments
+      const isMobile = width < 768;
+      // Make model smaller on mobile as requested (0.65 vs 1)
+      const targetScale = isMobile ? 0.65 : VIEW.modelScale;
+      world.scale.setScalar(targetScale);
     };
 
     window.addEventListener("resize", handleResize);
@@ -780,9 +802,7 @@ export default function App() {
             </article>
             <article className="timeline-step">
               <h3>تفاعل بلمسة واحدة</h3>
-              <p>
-                اضغط على النقطة أثناء المرور لإيقاف المدار وقراءة النبذة.
-              </p>
+              <p>اضغط على النقطة أثناء المرور لإيقاف المدار وقراءة النبذة.</p>
             </article>
           </div>
         </section>
@@ -812,8 +832,8 @@ export default function App() {
           <div className="highlight-card">
             <h2>اسألني عن رأس الخيمة</h2>
             <p>
-              نافذة معرفية قصيرة عن الإمارة، تظهر عند مرور الساتلايت فوقها لتقدّم
-              لمحة سريعة بأسلوب بصري مميّز.
+              نافذة معرفية قصيرة عن الإمارة، تظهر عند مرور الساتلايت فوقها
+              لتقدّم لمحة سريعة بأسلوب بصري مميّز.
             </p>
             <button className="btn btn-outline" type="button">
               ابدأ الآن
@@ -836,7 +856,7 @@ export default function App() {
               </div>
 
               <div id="uae-map" ref={mapRef}>
-        <img src="/map.png" alt="United Arab Emirates map with RAK" />
+                <img src="/map.png" alt="United Arab Emirates map with RAK" />
               </div>
 
               <div id="info" ref={infoRef}>
